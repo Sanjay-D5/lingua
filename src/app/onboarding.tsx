@@ -1,9 +1,12 @@
+import { useRouter } from "expo-router";
 import { Image, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { images } from "@/constants/images";
 
 export default function Onboarding() {
+  const router = useRouter();
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#FFFFFF" }}>
       <View className="flex-1 px-6 pb-6">
@@ -43,6 +46,7 @@ export default function Onboarding() {
 
         <TouchableOpacity
           activeOpacity={0.85}
+          onPress={() => router.push("/sign-up")}
           className="flex-row items-center justify-center gap-2 rounded-full bg-lingua-purple py-4"
         >
           <Text className="text--h4 text-white">Get Started</Text>
