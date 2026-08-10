@@ -1,55 +1,32 @@
-import { Link } from "expo-router";
-import { ScrollView, Text, View } from "react-native";
-
-const typographyRows = [
-  { label: "H1", className: "text--h1" },
-  { label: "H2", className: "text--h2" },
-  { label: "H3", className: "text--h3" },
-  { label: "H4", className: "text--h4" },
-  { label: "Body Large", className: "text--body-large" },
-  { label: "Body Medium", className: "text--body-medium" },
-  { label: "Body Small", className: "text--body-small" },
-  { label: "Caption", className: "text--caption" },
-];
-
-const colorSwatches = [
-  { label: "Lingua Purple", className: "bg-lingua-purple" },
-  { label: "Lingua Deep Purple", className: "bg-lingua-deep-purple" },
-  { label: "Lingua Blue", className: "bg-lingua-blue" },
-  { label: "Lingua Green", className: "bg-lingua-green" },
-  { label: "Success", className: "bg-success" },
-  { label: "Warning", className: "bg-warning" },
-  { label: "Streak", className: "bg-streak" },
-  { label: "Error", className: "bg-error" },
-  { label: "Info", className: "bg-info" },
-];
+import { useAuth } from "@clerk/expo";
+import { Redirect } from "expo-router";
+import { Text, TouchableOpacity, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function Index() {
+  const { isLoaded, isSignedIn, signOut } = useAuth();
+
+  if (!isLoaded) {
+    return null;
+  }
+
+  if (!isSignedIn) {
+    return <Redirect href="/onboarding" />;
+  }
+
   return (
-    <ScrollView className="flex-1 bg-background" contentContainerClassName="gap-6 p-6">
-      <Link href="/onboarding" className="text--body-large text-lingua-purple">
-        View onboarding screen →
-      </Link>
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#FFFFFF" }}>
+      <View className="flex-1 items-center justify-center gap-6 bg-background px-6">
+        <Text className="text--h1 text-lingua-purple">Lingua</Text>
 
-      <Text className="text--h2 text-text-primary">Typography</Text>
-      <View className="gap-3">
-        {typographyRows.map((row) => (
-          <View key={row.label} className="flex-row items-baseline gap-3">
-            <Text className={`${row.className} text-text-primary`}>Lingua {row.label}</Text>
-            <Text className="text--caption text-text-secondary">{row.label}</Text>
-          </View>
-        ))}
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={() => signOut()}
+          className="items-center rounded-2xl bg-lingua-purple px-8 py-4"
+        >
+          <Text className="text--h4 text-white">Sign Out</Text>
+        </TouchableOpacity>
       </View>
-
-      <Text className="text--h2 text-text-primary">Colors</Text>
-      <View className="flex-row flex-wrap gap-3">
-        {colorSwatches.map((swatch) => (
-          <View key={swatch.label} className="w-24 gap-2">
-            <View className={`h-16 w-24 rounded-2xl border border-border ${swatch.className}`} />
-            <Text className="text--caption text-text-secondary">{swatch.label}</Text>
-          </View>
-        ))}
-      </View>
-    </ScrollView>
+    </SafeAreaView>
   );
 }

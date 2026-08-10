@@ -1,3 +1,4 @@
+import { useSignIn, useSSO } from "@clerk/expo";
 import { Ionicons } from "@expo/vector-icons";
 import { Link, useRouter } from "expo-router";
 import { useState } from "react";
@@ -12,13 +13,38 @@ import { colors } from "@/theme";
 
 export default function SignIn() {
   const router = useRouter();
+  const { signIn, fetchStatus } = useSignIn();
+  const { startSSOFlow } = useSSO();
+
   const [email, setEmail] = useState("");
   const [verificationVisible, setVerificationVisible] = useState(false);
   const [challengeId, setChallengeId] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
 
-  const openVerification = () => {
+  const handleSignIn = async () => {
+    setFormError(null);
+
+    const { error } = await signIn.emailCode.sendCode({ emailAddress: email });
+    if (error) {
+      setFormError(error.message);
+      return;
+    }
+
     setChallengeId(`challenge-${Date.now()}`);
     setVerificationVisible(true);
+  };
+
+  const handleGoogleSignIn = async () => {
+    setFormError(null);
+    try {
+      const { createdSessionId, setActive } = await startSSOFlow({ strategy: "oauth_google" });
+      if (createdSessionId && setActive) {
+        await setActive({ session: createdSessionId });
+        router.replace("/");
+      }
+    } catch {
+      setFormError("Unable to continue with Google. Please try again.");
+    }
   };
 
   return (
@@ -58,9 +84,12 @@ export default function SignIn() {
           />
         </View>
 
+        {formError ? <Text className="text--caption text-error">{formError}</Text> : null}
+
         <TouchableOpacity
           activeOpacity={0.85}
-          onPress={openVerification}
+          onPress={handleSignIn}
+          disabled={fetchStatus === "fetching"}
           className="items-center rounded-2xl bg-lingua-purple py-4"
         >
           <Text className="text--h4 text-white">Sign In</Text>
@@ -73,7 +102,7 @@ export default function SignIn() {
         </View>
 
         <View className="gap-3">
-          <SocialButton provider="google" onPress={null} />
+          <SocialButton provider="google" onPress={handleGoogleSignIn} />
           <SocialButton provider="facebook" onPress={null} />
           <SocialButton provider="apple" onPress={null} />
         </View>
@@ -90,9 +119,16 @@ export default function SignIn() {
         visible={verificationVisible}
         email={email}
         challengeId={challengeId}
-        onVerifyCode={async (code, challengeId) => {
-          // Placeholder auth verification call.
-          // Replace with a real authentication service request.
+        onVerifyCode={async (code) => {
+          const { error } = await signIn.emailCode.verifyCode({ code });
+          if (error) {
+            return false;
+          }
+
+          if (signIn.status === "complete") {
+            await signIn.finalize();
+          }
+
           return true;
         }}
         onClose={() => setVerificationVisible(false)}

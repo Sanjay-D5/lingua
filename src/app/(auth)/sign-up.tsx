@@ -1,3 +1,4 @@
+import { useSignUp, useSSO } from "@clerk/expo";
 import { Ionicons } from "@expo/vector-icons";
 import { Link, useRouter } from "expo-router";
 import { useState } from "react";
@@ -12,14 +13,45 @@ import { colors } from "@/theme";
 
 export default function SignUp() {
   const router = useRouter();
+  const { signUp, fetchStatus } = useSignUp();
+  const { startSSOFlow } = useSSO();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [verificationVisible, setVerificationVisible] = useState(false);
   const [challengeId, setChallengeId] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
 
-  const openVerification = () => {
+  const handleSignUp = async () => {
+    setFormError(null);
+
+    const { error } = await signUp.password({ emailAddress: email, password });
+    if (error) {
+      setFormError(error.message);
+      return;
+    }
+
+    const { error: codeError } = await signUp.verifications.sendEmailCode();
+    if (codeError) {
+      setFormError(codeError.message);
+      return;
+    }
+
     setChallengeId(`challenge-${Date.now()}`);
     setVerificationVisible(true);
+  };
+
+  const handleGoogleSignIn = async () => {
+    setFormError(null);
+    try {
+      const { createdSessionId, setActive } = await startSSOFlow({ strategy: "oauth_google" });
+      if (createdSessionId && setActive) {
+        await setActive({ session: createdSessionId });
+        router.replace("/");
+      }
+    } catch {
+      setFormError("Unable to continue with Google. Please try again.");
+    }
   };
 
   return (
@@ -66,9 +98,12 @@ export default function SignUp() {
           />
         </View>
 
+        {formError ? <Text className="text--caption text-error">{formError}</Text> : null}
+
         <TouchableOpacity
           activeOpacity={0.85}
-          onPress={openVerification}
+          onPress={handleSignUp}
+          disabled={fetchStatus === "fetching"}
           className="items-center rounded-2xl bg-lingua-purple py-4"
         >
           <Text className="text--h4 text-white">Sign Up</Text>
@@ -81,7 +116,7 @@ export default function SignUp() {
         </View>
 
         <View className="gap-3">
-          <SocialButton provider="google" onPress={null} />
+          <SocialButton provider="google" onPress={handleGoogleSignIn} />
           <SocialButton provider="facebook" onPress={null} />
           <SocialButton provider="apple" onPress={null} />
         </View>
@@ -92,15 +127,25 @@ export default function SignUp() {
             Log in
           </Link>
         </View>
+
+        {/* Bot-protection mount point required by Clerk's custom sign-up flow. */}
+        <View nativeID="clerk-captcha" />
       </ScrollView>
 
       <VerificationModal
         visible={verificationVisible}
         email={email}
         challengeId={challengeId}
-        onVerifyCode={async (code, challengeId) => {
-          // Placeholder auth verification call.
-          // Replace with a real authentication service request.
+        onVerifyCode={async (code) => {
+          const { error } = await signUp.verifications.verifyEmailCode({ code });
+          if (error) {
+            return false;
+          }
+
+          if (signUp.status === "complete") {
+            await signUp.finalize();
+          }
+
           return true;
         }}
         onClose={() => setVerificationVisible(false)}
