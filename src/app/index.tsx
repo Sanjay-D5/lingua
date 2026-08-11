@@ -3,6 +3,7 @@ import { Redirect, useRouter } from "expo-router";
 import { Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { languages } from "@/data/languages";
 import { useLanguageStore } from "@/store/language-store";
 
 export default function Index() {
@@ -10,6 +11,7 @@ export default function Index() {
   const { isLoaded, isSignedIn, signOut } = useAuth();
   const selectedLanguageId = useLanguageStore((state) => state.selectedLanguageId);
   const clearSelectedLanguage = useLanguageStore((state) => state.clearSelectedLanguage);
+  const selectedLanguageName = languages.find((language) => language.id === selectedLanguageId)?.name;
 
   if (!isLoaded) {
     return null;
@@ -33,7 +35,7 @@ export default function Index() {
         </TouchableOpacity>
 
         <Text className="text--body-large text-text-secondary">
-          Selected language: {selectedLanguageId ?? "Not set"}
+          Selected language: {selectedLanguageName ?? "Not set"}
         </Text>
 
         <TouchableOpacity

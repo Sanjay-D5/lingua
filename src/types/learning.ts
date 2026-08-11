@@ -2,7 +2,7 @@
 // Content lives in data/languages.ts, data/units.ts, and data/lessons.ts.
 // Progress (completed lessons, XP, streaks) is NOT stored here — that lives in Zustand.
 
-export type LanguageId = "es" | "fr" | "ja" | "ko" | "de" | "zh";
+export type LanguageId = "es" | "fr" | "ja";
 
 export interface Language {
   id: LanguageId;

@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Image,
   ScrollView,
@@ -19,17 +19,31 @@ import { useLanguageStore } from "@/store/language-store";
 import { colors } from "@/theme";
 import type { LanguageId } from "@/types/learning";
 
+function toValidLanguageId(id: LanguageId | null): LanguageId {
+  return id && languages.some((language) => language.id === id) ? id : languages[0].id;
+}
+
 export default function LanguageSelection() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const [query, setQuery] = useState("");
   const selectedLanguageId = useLanguageStore((state) => state.selectedLanguageId);
+  const hasHydrated = useLanguageStore((state) => state.hasHydrated);
   const setSelectedLanguage = useLanguageStore((state) => state.setSelectedLanguage);
-  const validSelectedLanguageId =
-    selectedLanguageId && languages.some((language) => language.id === selectedLanguageId)
-      ? selectedLanguageId
-      : languages[0].id;
-  const [selectedId, setSelectedId] = useState<LanguageId>(validSelectedLanguageId);
+
+  const [selectedId, setSelectedId] = useState<LanguageId>(() => toValidLanguageId(selectedLanguageId));
+
+  // selectedLanguageId reads null until AsyncStorage finishes restoring it, so the
+  // draft above starts on the Spanish fallback on every cold start. Re-sync it once
+  // hydration completes so a persisted pick (e.g. "fr") isn't silently overwritten
+  // by Confirm before the user touches anything.
+  const hasSyncedAfterHydration = useRef(false);
+  useEffect(() => {
+    if (hasHydrated && !hasSyncedAfterHydration.current) {
+      hasSyncedAfterHydration.current = true;
+      setSelectedId(toValidLanguageId(selectedLanguageId));
+    }
+  }, [hasHydrated, selectedLanguageId]);
 
   const filteredLanguages = useMemo(() => {
     const search = query.trim().toLowerCase();
