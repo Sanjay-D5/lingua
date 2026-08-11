@@ -1,0 +1,32 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { create } from "zustand";
+import { createJSONStorage, persist } from "zustand/middleware";
+
+import type { LanguageId } from "@/types/learning";
+
+interface LanguageStore {
+  selectedLanguageId: LanguageId | null;
+  hasHydrated: boolean;
+  setSelectedLanguage: (languageId: LanguageId) => void;
+  clearSelectedLanguage: () => void;
+  setHasHydrated: (value: boolean) => void;
+}
+
+export const useLanguageStore = create<LanguageStore>()(
+  persist(
+    (set) => ({
+      selectedLanguageId: null,
+      hasHydrated: false,
+      setSelectedLanguage: (languageId) => set({ selectedLanguageId: languageId }),
+      clearSelectedLanguage: () => set({ selectedLanguageId: null }),
+      setHasHydrated: (value) => set({ hasHydrated: value }),
+    }),
+    {
+      name: "language-selection-store",
+      storage: createJSONStorage(() => AsyncStorage),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
+    },
+  ),
+);
