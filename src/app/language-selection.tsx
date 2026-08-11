@@ -15,6 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { LanguageCard } from "@/components/language/LanguageCard";
 import { images } from "@/constants/images";
 import { languages } from "@/data/languages";
+import { useLanguageStore } from "@/store/language-store";
 import { colors } from "@/theme";
 import type { LanguageId } from "@/types/learning";
 
@@ -22,7 +23,13 @@ export default function LanguageSelection() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const [query, setQuery] = useState("");
-  const [selectedId, setSelectedId] = useState<LanguageId>(languages[0].id);
+  const selectedLanguageId = useLanguageStore((state) => state.selectedLanguageId);
+  const setSelectedLanguage = useLanguageStore((state) => state.setSelectedLanguage);
+  const validSelectedLanguageId =
+    selectedLanguageId && languages.some((language) => language.id === selectedLanguageId)
+      ? selectedLanguageId
+      : languages[0].id;
+  const [selectedId, setSelectedId] = useState<LanguageId>(validSelectedLanguageId);
 
   const filteredLanguages = useMemo(() => {
     const search = query.trim().toLowerCase();
@@ -51,6 +58,7 @@ export default function LanguageSelection() {
 
         <View className="flex-row items-center justify-between px-6 pt-2">
           <TouchableOpacity
+            accessibilityLabel="Go back"
             onPress={() => router.back()}
             hitSlop={12}
             className="h-10 w-10 items-center justify-center"
@@ -94,7 +102,10 @@ export default function LanguageSelection() {
 
             <TouchableOpacity
               activeOpacity={0.85}
-              onPress={() => router.back()}
+              onPress={() => {
+                setSelectedLanguage(selectedId);
+                router.back();
+              }}
               className="items-center rounded-full bg-lingua-purple py-4"
             >
               <Text className="text--h4 text-white">Confirm</Text>

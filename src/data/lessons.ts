@@ -235,7 +235,7 @@ export const lessons: Lesson[] = [
     xp: 10,
     icon: "🙋",
     vocabulary: [
-      { id: "ja-u1-l2-v1", term: "私は", translation: "I am", pronunciation: "Watashi wa" },
+      { id: "ja-u1-l2-v1", term: "私は___です", translation: "I am ___", pronunciation: "Watashi wa ___ desu" },
       { id: "ja-u1-l2-v2", term: "～から来ました", translation: "I come from ~", pronunciation: "~kara kimashita" },
       { id: "ja-u1-l2-v3", term: "はじめまして", translation: "Nice to meet you", pronunciation: "Hajimemashite" },
     ],
@@ -254,9 +254,9 @@ export const lessons: Lesson[] = [
       },
     ],
     activities: [
-      { id: "ja-u1-l2-a1", type: "vocabulary", prompt: "How do you say 'I am' in Japanese?", vocabularyId: "ja-u1-l2-v1" },
+      { id: "ja-u1-l2-a1", type: "vocabulary", prompt: "How do you say 'I am ___' in Japanese?", vocabularyId: "ja-u1-l2-v1" },
       { id: "ja-u1-l2-a2", type: "phrase", prompt: "Say where you're from in Japanese.", phraseId: "ja-u1-l2-p1" },
-      { id: "ja-u1-l2-a3", type: "speaking", prompt: "Introduce yourself using 'Watashi wa ___ kara kimashita. Hajimemashite.'" },
+      { id: "ja-u1-l2-a3", type: "speaking", prompt: "Introduce yourself using 'Watashi wa ___ desu. ___ kara kimashita. Hajimemashite.'" },
     ],
     aiTeacher: {
       persona: "a warm, energetic Japanese teacher who teaches through English",
