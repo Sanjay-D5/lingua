@@ -1,9 +1,10 @@
 import { useAuth } from "@clerk/expo";
-import { Redirect } from "expo-router";
+import { Redirect, useRouter } from "expo-router";
 import { Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function Index() {
+  const router = useRouter();
   const { isLoaded, isSignedIn, signOut } = useAuth();
 
   if (!isLoaded) {
@@ -18,6 +19,14 @@ export default function Index() {
     <SafeAreaView style={{ flex: 1, backgroundColor: "#FFFFFF" }}>
       <View className="flex-1 items-center justify-center gap-6 bg-background px-6">
         <Text className="text--h1 text-lingua-purple">Lingua</Text>
+
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={() => router.push("/language-selection")}
+          className="items-center rounded-2xl border border-border px-8 py-4"
+        >
+          <Text className="text--h4 text-text-primary">Choose a language</Text>
+        </TouchableOpacity>
 
         <TouchableOpacity
           activeOpacity={0.85}
