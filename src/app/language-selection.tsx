@@ -109,7 +109,14 @@ export default function LanguageSelection() {
                   key={language.id}
                   language={language}
                   selected={language.id === selectedId}
-                  onPress={() => setSelectedId(language.id)}
+                  onPress={() => {
+                    // Before hydration, a tap would land on the draft that's about to be
+                    // overwritten by the hydration-sync effect above — ignore it rather
+                    // than let it silently get discarded a moment later.
+                    if (hasHydrated) {
+                      setSelectedId(language.id);
+                    }
+                  }}
                 />
               ))}
             </View>
@@ -117,6 +124,11 @@ export default function LanguageSelection() {
             <TouchableOpacity
               activeOpacity={0.85}
               onPress={() => {
+                // Don't persist before hydration finishes — the store could still
+                // rehydrate over this write with an older, previously-persisted value.
+                if (!hasHydrated) {
+                  return;
+                }
                 setSelectedLanguage(selectedId);
                 router.back();
               }}
