@@ -31,6 +31,13 @@
   --color-surface: #f6f7fb;
   --color-background: #ffffff;
 
+  /* Soft tinted card surfaces. Defined as solid colors (not `bg-color/NN`
+     opacity modifiers) because this NativeWind preview doesn't reliably
+     resolve color-mix()-based opacity for these utilities on-device. */
+  --color-surface-warm: #fdf1e3;
+  --color-surface-warm-track: #f5e0bf;
+  --color-on-brand-subtle: #e3ddff;
+
   /* Typography */
   --font-sans: "Poppins-Regular";
   --font-poppins-regular: "Poppins-Regular";

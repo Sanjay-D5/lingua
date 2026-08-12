@@ -130,7 +130,7 @@ export default function LanguageSelection() {
                   return;
                 }
                 setSelectedLanguage(selectedId);
-                router.back();
+                router.replace("/");
               }}
               className="items-center rounded-full bg-lingua-purple py-4"
             >

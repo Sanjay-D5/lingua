@@ -28,4 +28,12 @@ export const colors = {
     surface: "#F6F7FB",
     background: "#FFFFFF",
   },
+  // Soft tinted card surfaces — see the comment above the matching
+  // tokens in src/global.css for why these are solid colors, not
+  // `bg-color/NN` opacity modifiers.
+  surfaceTint: {
+    warm: "#FDF1E3",
+    warmTrack: "#F5E0BF",
+    onBrandSubtle: "#E3DDFF",
+  },
 } as const;
