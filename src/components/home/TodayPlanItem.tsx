@@ -26,6 +26,7 @@ export function TodayPlanItem({ icon, iconBgClassName, title, subtitle, complete
         activeOpacity={0.8}
         onPress={onToggle}
         accessibilityRole="checkbox"
+        accessibilityLabel={`${title}, ${completed ? "completed" : "not completed"}`}
         accessibilityState={{ checked: completed }}
         hitSlop={8}
         className={`h-7 w-7 items-center justify-center rounded-full ${

@@ -28,12 +28,17 @@ function findGreetingWord(languageId: string) {
   return helloVocab?.term ?? "Hi";
 }
 
+// Must match the ":kind" suffixes used to build each planItems id below.
+const PLAN_ITEM_KINDS = ["lesson", "conversation", "words"] as const;
+
 function findCurrentLesson(languageId: string, completedPlanItemIds: string[]): Lesson | undefined {
   const languageLessons = lessons
     .filter((lesson) => lesson.languageId === languageId)
     .sort((a, b) => a.order - b.order);
 
-  const nextIncomplete = languageLessons.find((lesson) => !completedPlanItemIds.includes(`${lesson.id}:lesson`));
+  const nextIncomplete = languageLessons.find((lesson) =>
+    PLAN_ITEM_KINDS.some((kind) => !completedPlanItemIds.includes(`${lesson.id}:${kind}`)),
+  );
 
   return nextIncomplete ?? languageLessons[languageLessons.length - 1];
 }
@@ -45,6 +50,7 @@ export default function Home() {
   const completedPlanItemIds = useProgressStore((state) => state.completedPlanItemIds);
   const streak = useProgressStore((state) => state.streak);
   const togglePlanItem = useProgressStore((state) => state.togglePlanItem);
+  const hasHydrated = useProgressStore((state) => state.hasHydrated);
 
   const language = languages.find((lang) => lang.id === selectedLanguageId) ?? languages[0];
   const currentLesson = findCurrentLesson(language.id, completedPlanItemIds);
@@ -52,7 +58,10 @@ export default function Home() {
   const greetingWord = findGreetingWord(language.id);
   const firstName = user?.firstName ?? "there";
 
-  if (!currentLesson || !currentUnit) {
+  // Wait for AsyncStorage to finish restoring progress before rendering —
+  // otherwise a tap here could be silently overwritten by rehydration,
+  // the same race language-selection.tsx guards against for language-store.
+  if (!hasHydrated || !currentLesson || !currentUnit) {
     return null;
   }
 

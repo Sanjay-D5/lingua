@@ -46,14 +46,14 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
 
     if (!hasPositioned.current) {
       hasPositioned.current = true;
-      translateX.value = target;
+      translateX.set(target);
     } else {
-      translateX.value = withTiming(target, { duration: 260, easing: Easing.out(Easing.cubic) });
+      translateX.set(withTiming(target, { duration: 260, easing: Easing.out(Easing.cubic) }));
     }
   }, [barWidth, state.index, state.routes.length, translateX]);
 
   const circleAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: translateX.value }],
+    transform: [{ translateX: translateX.get() }],
   }));
 
   return (
