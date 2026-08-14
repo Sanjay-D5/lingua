@@ -48,7 +48,12 @@ export default function SignUp() {
       const { createdSessionId, setActive } = await startSSOFlow({ strategy: "oauth_google" });
       if (createdSessionId && setActive) {
         await setActive({ session: createdSessionId });
-        posthog?.capture("sign_up_completed", { method: "google" });
+        // Emit sign_up_completed only if this is a new sign-up
+        if (signUp?.status === "complete" || signUp?.createdUserId) {
+          posthog?.capture("sign_up_completed", { method: "google" });
+        } else {
+          posthog?.capture("google_sso_completed", { method: "google" });
+        }
         router.replace("/");
       }
     } catch {

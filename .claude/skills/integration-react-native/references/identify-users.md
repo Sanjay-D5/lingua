@@ -2,10 +2,6 @@
 
 # Identify users - Docs
 
-Copy page
-
-# Identify users - Docs
-
 Linking events to specific users enables you to build a full picture of how they're using your product across different sessions, devices, and platforms.
 
 This is straightforward to do when [capturing backend events](/docs/product-analytics/capture-events?tab=Node.js.md), as you associate events to a specific user using a `distinct_id`, which is a required argument.
@@ -14,9 +10,7 @@ However, in the frontend of a [web](/docs/libraries/js/usage.md#capturing-events
 
 To link events to specific users, call `identify`:
 
-PostHog AI
-
-### Web
+**Web**
 
 ```javascript
 posthog.identify(
@@ -25,7 +19,7 @@ posthog.identify(
 );
 ```
 
-### Android
+**Android**
 
 ```kotlin
 PostHog.identify(
@@ -38,14 +32,14 @@ PostHog.identify(
 )
 ```
 
-### iOS
+**iOS**
 
 ```swift
 PostHogSDK.shared.identify("distinct_id", // Replace "distinct_id" with your user's unique identifier
                            userProperties: ["name": "Max Hedgehog", "email": "max@hedgehogmail.com"]) // optional: set additional person properties
 ```
 
-### React Native
+**React Native**
 
 ```jsx
 posthog.identify('distinct_id', { // Replace "distinct_id" with your user's unique identifier
@@ -54,7 +48,7 @@ posthog.identify('distinct_id', { // Replace "distinct_id" with your user's uniq
 })
 ```
 
-### Dart
+**Dart**
 
 ```dart
 await Posthog().identify(
@@ -68,7 +62,7 @@ await Posthog().identify(
 
 Events captured after calling `identify` are identified events and this creates a person profile if one doesn't exist already.
 
-Due to the cost of processing them, anonymous events can be up to 4x cheaper than identified events, so it's recommended you only capture identified events when needed.
+Due to the cost of processing them, identified events incur higher costs than anonymous events. It's recommended to identify authenticated users whenever possible, reserving anonymous-only tracking for high-volume, genuinely anonymous traffic where authentication is not applicable.
 
 ## How identify works
 
@@ -104,9 +98,7 @@ If you call `identify` multiple times with the same data without reloading the p
 
 If your app already knows the signed-in user when you initialize the JavaScript web SDK, the [`loaded` callback](/docs/libraries/js/config.md) is a convenient place to call `identify`. This identifies the user as soon as the SDK has loaded:
 
-Web
-
-PostHog AI
+**Web**
 
 ```javascript
 posthog.init('<ph_project_token>', {
@@ -144,9 +136,7 @@ This is important if your users are sharing a computer, as otherwise all of thos
 
 You can do that like so:
 
-PostHog AI
-
-### Web
+**Web**
 
 ```javascript
 posthog.reset()
@@ -164,13 +154,13 @@ PostHogSDK.shared.reset()
 PostHog.reset()
 ```
 
-### React Native
+**React Native**
 
 ```jsx
 posthog.reset()
 ```
 
-### Dart
+**Dart**
 
 ```dart
 await Posthog().reset();
@@ -178,9 +168,7 @@ await Posthog().reset();
 
 If you *also* want to reset the `device_id` so that the device will be considered a new device in future events, you can pass `true` as an argument:
 
-Web
-
-PostHog AI
+**Web**
 
 ```javascript
 posthog.reset(true)
@@ -204,7 +192,7 @@ See our [person properties docs](/docs/product-analytics/person-properties.md) f
 
 ### 5\. Use deep links between platforms
 
-We recommend you call `identify` [as soon as you're able](#1-call-identify-as-soon-as-youre-able), typically when a user signs up or logs in.
+We recommend you call `identify` [as soon as you're able](#1-call-identify-as-soon-as-youre-able-to), typically when a user signs up or logs in.
 
 This doesn't work if one or both platforms are unauthenticated. Some examples of such cases are:
 
@@ -223,11 +211,9 @@ In these cases, you can use a [deep link](https://developer.android.com/training
 
 As long as you associate the distinct IDs with `posthog.identify()` or `posthog.alias()`, you can track events generated across platforms.
 
-Here's an example implementation for handling deep links from web to mobile:
+Here's an example implementation for handling deep links from web to mobile using a server-generated signed handoff token:
 
-PostHog AI
-
-### iOS
+**iOS**
 
 ```swift
 import PostHog
@@ -235,18 +221,29 @@ class DeepLinkIdentityManager {
     static let shared = DeepLinkIdentityManager()
     // MARK: - Deep Link Received
     func handleDeepLink(_ url: URL, isAuthenticatedOnMobile: Bool) {
-        guard let webDistinctId = URLComponents(url: url, resolvingAgainstBaseURL: true)?
-            .queryItems?.first(where: { $0.name == "ph_distinct_id" })?.value else {
+        // Extract the signed handoff token from the deep link
+        guard let handoffToken = URLComponents(url: url, resolvingAgainstBaseURL: true)?
+            .queryItems?.first(where: { $0.name == "token" })?.value else {
+            return
+        }
+        // Validate the token server-side and retrieve the identity
+        guard let identity = validateAndRetrieveIdentity(token: handoffToken) else {
             return
         }
         if isAuthenticatedOnMobile {
             // The mobile app already knows the current user.
-            // Alias the incoming web distinct ID to that user.
-            PostHogSDK.shared.alias(webDistinctId)
+            // Alias the retrieved identity to that user.
+            PostHogSDK.shared.alias(identity)
         } else {
-            // Reuse the web distinct ID until login on mobile.
-            PostHogSDK.shared.identify(webDistinctId)
+            // Identify with the validated identity until login on mobile.
+            PostHogSDK.shared.identify(identity)
         }
+    }
+    
+    private func validateAndRetrieveIdentity(token: String) -> String? {
+        // Call your server to validate the token and retrieve the safe identity
+        // This prevents passing raw ph_distinct_id directly
+        return nil // Implement server validation
     }
     // MARK: - Login/Signup
     func handleLogin(canonicalUserId: String) {
@@ -261,7 +258,7 @@ class DeepLinkIdentityManager {
 }
 ```
 
-### Android
+**Android (Kotlin)**
 
 ```kotlin
 import android.net.Uri
@@ -269,15 +266,24 @@ import com.posthog.PostHog
 object DeepLinkIdentityManager {
     // Deep Link Received
     fun handleDeepLink(uri: Uri, isAuthenticatedOnMobile: Boolean) {
-        val webDistinctId = uri.getQueryParameter("ph_distinct_id") ?: return
+        // Extract the signed handoff token from the deep link
+        val handoffToken = uri.getQueryParameter("token") ?: return
+        // Validate the token server-side and retrieve the identity
+        val identity = validateAndRetrieveIdentity(handoffToken) ?: return
         if (isAuthenticatedOnMobile) {
             // The mobile app already knows the current user.
-            // Alias the incoming web distinct ID to that user.
-            PostHog.alias(webDistinctId)
+            // Alias the retrieved identity to that user.
+            PostHog.alias(identity)
         } else {
-            // Reuse the web distinct ID until login on mobile.
-            PostHog.identify(webDistinctId)
+            // Identify with the validated identity until login on mobile.
+            PostHog.identify(identity)
         }
+    }
+    
+    private fun validateAndRetrieveIdentity(token: String): String? {
+        // Call your server to validate the token and retrieve the safe identity
+        // This prevents passing raw ph_distinct_id directly
+        return null // Implement server validation
     }
     // Login/Signup
     fun handleLogin(canonicalUserId: String) {
