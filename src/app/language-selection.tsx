@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { LanguageCard } from "@/components/language/LanguageCard";
+import { posthog } from "@/config/posthog";
 import { images } from "@/constants/images";
 import { languages } from "@/data/languages";
 import { useLanguageStore } from "@/store/language-store";
@@ -130,6 +131,7 @@ export default function LanguageSelection() {
                   return;
                 }
                 setSelectedLanguage(selectedId);
+                posthog?.capture("language_selected", { language_id: selectedId });
                 router.replace("/");
               }}
               className="items-center rounded-full bg-lingua-purple py-4"

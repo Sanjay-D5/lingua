@@ -8,6 +8,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { AuthTextField } from "@/components/auth/AuthTextField";
 import { SocialButton } from "@/components/auth/SocialButton";
 import { VerificationModal } from "@/components/auth/VerificationModal";
+import { posthog } from "@/config/posthog";
 import { images } from "@/constants/images";
 import { colors } from "@/theme";
 
@@ -47,6 +48,12 @@ export default function SignUp() {
       const { createdSessionId, setActive } = await startSSOFlow({ strategy: "oauth_google" });
       if (createdSessionId && setActive) {
         await setActive({ session: createdSessionId });
+        // Emit sign_up_completed only if this is a new sign-up
+        if (signUp?.status === "complete" || signUp?.createdUserId) {
+          posthog?.capture("sign_up_completed", { method: "google" });
+        } else {
+          posthog?.capture("google_sso_completed", { method: "google" });
+        }
         router.replace("/");
       }
     } catch {
@@ -144,6 +151,7 @@ export default function SignUp() {
 
           if (signUp.status === "complete") {
             await signUp.finalize();
+            posthog?.capture("sign_up_completed", { method: "email" });
           }
 
           return true;
