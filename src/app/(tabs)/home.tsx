@@ -12,10 +12,10 @@ import { images } from "@/constants/images";
 import { languages } from "@/data/languages";
 import { lessons } from "@/data/lessons";
 import { units } from "@/data/units";
+import { findCurrentLesson } from "@/lib/lesson-progress";
 import { useLanguageStore } from "@/store/language-store";
 import { useProgressStore } from "@/store/progress-store";
 import { colors } from "@/theme";
-import type { Lesson } from "@/types/learning";
 
 const DAILY_GOAL_XP = 20;
 const AI_CONVERSATION_XP = 5;
@@ -27,21 +27,6 @@ function findGreetingWord(languageId: string) {
     .flatMap((lesson) => lesson.vocabulary)
     .find((vocab) => vocab.translation === "Hello");
   return helloVocab?.term ?? "Hi";
-}
-
-// Must match the ":kind" suffixes used to build each planItems id below.
-const PLAN_ITEM_KINDS = ["lesson", "conversation", "words"] as const;
-
-function findCurrentLesson(languageId: string, completedPlanItemIds: string[]): Lesson | undefined {
-  const languageLessons = lessons
-    .filter((lesson) => lesson.languageId === languageId)
-    .sort((a, b) => a.order - b.order);
-
-  const nextIncomplete = languageLessons.find((lesson) =>
-    PLAN_ITEM_KINDS.some((kind) => !completedPlanItemIds.includes(`${lesson.id}:${kind}`)),
-  );
-
-  return nextIncomplete ?? languageLessons[languageLessons.length - 1];
 }
 
 export default function Home() {
