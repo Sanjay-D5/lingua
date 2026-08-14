@@ -7,6 +7,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { TodayPlanItem } from "@/components/home/TodayPlanItem";
 import { XPBar } from "@/components/home/XPBar";
+import { posthog } from "@/config/posthog";
 import { images } from "@/constants/images";
 import { languages } from "@/data/languages";
 import { lessons } from "@/data/lessons";
@@ -179,7 +180,17 @@ export default function Home() {
                 title={item.title}
                 subtitle={item.subtitle}
                 completed={completedPlanItemIds.includes(item.id)}
-                onToggle={() => togglePlanItem(item.id)}
+                onToggle={() => {
+                  if (!completedPlanItemIds.includes(item.id)) {
+                    posthog?.capture("daily_plan_item_completed", {
+                      language_id: language.id,
+                      lesson_id: currentLesson.id,
+                      plan_item_type: item.id.split(":")[1],
+                      xp_awarded: item.xp,
+                    });
+                  }
+                  togglePlanItem(item.id);
+                }}
               />
             ))}
           </View>
