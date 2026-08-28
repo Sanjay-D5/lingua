@@ -1,8 +1,9 @@
-import { useUser } from "@clerk/expo";
+import { useAuth, useUser } from "@clerk/expo";
 import { Ionicons } from "@expo/vector-icons";
+import { CallingState, useStreamVideoClient, type Call } from "@stream-io/video-react-native-sdk";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Image, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -11,13 +12,14 @@ import { images } from "@/constants/images";
 import { languages } from "@/data/languages";
 import { lessons } from "@/data/lessons";
 import { PLAN_ITEM_KINDS, isLessonCompleted } from "@/lib/lesson-progress";
+import { createLessonCall, startLessonAgent, stopLessonAgent, type AgentStatus } from "@/lib/stream";
 import { useProgressStore } from "@/store/progress-store";
 import { colors } from "@/theme";
 
-// Time before the mock AI teacher "picks up" — long enough to read as a real
-// connection, short enough to not make the UI feel broken. Swapped for a real
-// Vision Agents connect event once Stream is wired up (see prompts 13-15).
-const CONNECT_DELAY_MS = 1400;
+// Real call lifecycle, driven by Stream Video (see prompts/13-stream-integration.md):
+// "connecting" while the call is being created/joined, "joined" once the SFU
+// connection is up, "error" if joining failed, "ended" once the user leaves.
+type CallStatus = "connecting" | "joined" | "error" | "ended";
 
 function formatDuration(totalSeconds: number) {
   const minutes = Math.floor(totalSeconds / 60);
@@ -60,30 +62,129 @@ const styles = StyleSheet.create({
 export default function LessonDetail() {
   const router = useRouter();
   const { user } = useUser();
+  const { getToken } = useAuth();
+  const streamClient = useStreamVideoClient();
   const { id } = useLocalSearchParams<{ id: string }>();
   const completedPlanItemIds = useProgressStore((state) => state.completedPlanItemIds);
   const togglePlanItem = useProgressStore((state) => state.togglePlanItem);
 
-  const [connected, setConnected] = useState(false);
+  const [call, setCall] = useState<Call>();
+  const [callStatus, setCallStatus] = useState<CallStatus>("connecting");
+  const [callError, setCallError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [micOn, setMicOn] = useState(true);
   const [cameraOn, setCameraOn] = useState(true);
   const [subtitlesOn, setSubtitlesOn] = useState(true);
   const [phraseIndex, setPhraseIndex] = useState(0);
+  const [agentStatus, setAgentStatus] = useState<AgentStatus>("idle");
+  const agentSessionIdRef = useRef<string | null>(null);
 
   const lesson = lessons.find((item) => item.id === id);
   const language = lesson ? languages.find((lang) => lang.id === lesson.languageId) : undefined;
+  const isJoined = callStatus === "joined";
+
+  // Idempotent: safe to call from both handleEndCall and the join effect's
+  // unmount cleanup without double-stopping a session that's already gone.
+  async function stopAgentSession() {
+    const sessionId = agentSessionIdRef.current;
+    if (!sessionId || !lesson) return;
+    agentSessionIdRef.current = null;
+    try {
+      await stopLessonAgent(getToken, lesson.id, sessionId);
+    } catch (err) {
+      console.error("Failed to stop lesson agent", err);
+    }
+  }
 
   useEffect(() => {
-    const timeout = setTimeout(() => setConnected(true), CONNECT_DELAY_MS);
-    return () => clearTimeout(timeout);
-  }, []);
+    if (!streamClient || !lesson) return;
+
+    let cancelled = false;
+    let joinedCall: Call | undefined;
+
+    (async () => {
+      setCallStatus("connecting");
+      setCallError(null);
+      setAgentStatus("idle");
+      try {
+        const { callType, callId } = await createLessonCall(getToken, lesson.id);
+        if (cancelled) return;
+        // `{ reuseInstance: true }` is required on every destination call
+        // screen — the same (type, id) may already be live in the SDK.
+        const c = streamClient.call(callType, callId, { reuseInstance: true });
+        joinedCall = c;
+        setCall(c);
+
+        await c.join({ create: true });
+        // Audio-only lesson: never publish the camera. The on-screen "camera"
+        // toggle only shows/hides the local avatar preview, it does not
+        // control a real video track.
+        await c.camera.disable().catch(() => {});
+        if (!micOn) {
+          await c.microphone.disable().catch(() => {});
+        }
+        if (cancelled) return;
+        setCallStatus("joined");
+
+        // Now that the student is in the call, have the AI teacher join too.
+        setAgentStatus("connecting");
+        try {
+          const { sessionId } = await startLessonAgent(getToken, lesson.id);
+          if (cancelled) {
+            // Screen was unmounted mid-start — nothing else references this
+            // session, so close it here instead of leaking it.
+            stopLessonAgent(getToken, lesson.id, sessionId).catch((err) => console.error(err));
+            return;
+          }
+          agentSessionIdRef.current = sessionId;
+          setAgentStatus("connected");
+        } catch (err) {
+          console.error("Failed to start lesson agent", err);
+          if (!cancelled) setAgentStatus("failed");
+        }
+      } catch (err) {
+        console.error("Failed to join lesson call", err);
+        if (!cancelled) {
+          setCallStatus("error");
+          setCallError(err instanceof Error ? err.message : "Couldn't connect to the lesson call.");
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      stopAgentSession();
+      if (joinedCall && joinedCall.state.callingState !== CallingState.LEFT) {
+        joinedCall.leave().catch((err) => console.error(err));
+      }
+    };
+    // Mic start state is only applied once at join time — toggling afterwards
+    // goes through handleToggleMic, so `micOn` is intentionally not a dep here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streamClient, lesson?.id, retryCount]);
 
   useEffect(() => {
-    if (!connected) return;
+    if (!isJoined) return;
     const interval = setInterval(() => setElapsedSeconds((seconds) => seconds + 1), 1000);
     return () => clearInterval(interval);
-  }, [connected]);
+  }, [isJoined]);
+
+  async function handleToggleMic() {
+    const next = !micOn;
+    setMicOn(next);
+    if (!call) return;
+    try {
+      if (next) {
+        await call.microphone.enable();
+      } else {
+        await call.microphone.disable();
+      }
+    } catch (err) {
+      console.error("Failed to toggle microphone", err);
+      setMicOn(!next);
+    }
+  }
 
   if (!lesson) {
     return (
@@ -100,10 +201,10 @@ export default function LessonDetail() {
 
   const completed = isLessonCompleted(lesson, completedPlanItemIds);
   const currentPhrase = lesson.phrases[phraseIndex % lesson.phrases.length];
-  const bubblePrimary = connected ? currentPhrase.text : "Hi, I'm your AI teacher! 👋";
-  const bubbleSecondary = connected ? currentPhrase.translation : lesson.aiTeacher.persona;
+  const bubblePrimary = isJoined ? currentPhrase.text : "Hi, I'm your AI teacher! 👋";
+  const bubbleSecondary = isJoined ? currentPhrase.translation : lesson.aiTeacher.persona;
 
-  function handleEndCall() {
+  async function handleEndCall() {
     if (!completed) {
       PLAN_ITEM_KINDS.forEach((kind) => {
         const itemId = `${lesson!.id}:${kind}`;
@@ -116,6 +217,16 @@ export default function LessonDetail() {
         lesson_id: lesson!.id,
         xp_awarded: lesson!.xp,
       });
+    }
+    setCallStatus("ended");
+    setAgentStatus("idle");
+    await stopAgentSession();
+    try {
+      if (call && call.state.callingState !== CallingState.LEFT) {
+        await call.leave();
+      }
+    } catch (err) {
+      console.error("Failed to leave lesson call", err);
     }
     router.back();
   }
@@ -135,9 +246,44 @@ export default function LessonDetail() {
         <View className="flex-1 items-center">
           <Text className="text--h4 text-text-primary">AI Teacher</Text>
           <View className="flex-row items-center gap-1.5">
-            <View className={`h-2 w-2 rounded-full ${connected ? "bg-success" : "bg-text-secondary"}`} />
-            <Text className="text--body-small text-text-secondary">{connected ? "Online" : "Connecting…"}</Text>
+            <View
+              className={`h-2 w-2 rounded-full ${
+                callStatus === "joined" ? "bg-success" : callStatus === "error" ? "bg-error" : "bg-text-secondary"
+              }`}
+            />
+            <Text className="text--body-small text-text-secondary">
+              {callStatus === "joined"
+                ? "Online"
+                : callStatus === "error"
+                  ? "Connection error"
+                  : callStatus === "ended"
+                    ? "Call ended"
+                    : "Connecting…"}
+            </Text>
           </View>
+          {isJoined ? (
+            <View className="flex-row items-center gap-1.5">
+              <View
+                className={`h-2 w-2 rounded-full ${
+                  agentStatus === "connected"
+                    ? "bg-success"
+                    : agentStatus === "failed"
+                      ? "bg-error"
+                      : "bg-text-secondary"
+                }`}
+              />
+              <Text className="text--body-small text-text-secondary">
+                AI teacher:{" "}
+                {agentStatus === "connected"
+                  ? "Ready"
+                  : agentStatus === "failed"
+                    ? "Couldn't connect"
+                    : agentStatus === "connecting"
+                      ? "Connecting…"
+                      : "Waiting"}
+              </Text>
+            </View>
+          ) : null}
         </View>
 
         <View className="flex-row items-center gap-2">
@@ -157,7 +303,7 @@ export default function LessonDetail() {
           </View>
           <TouchableOpacity
             accessibilityLabel={micOn ? "Mute microphone" : "Unmute microphone"}
-            onPress={() => setMicOn((value) => !value)}
+            onPress={() => void handleToggleMic()}
             className="h-9 w-9 items-center justify-center rounded-full border border-border"
           >
             <Ionicons
@@ -220,11 +366,28 @@ export default function LessonDetail() {
           className="absolute inset-x-4 bottom-4 flex-row items-start gap-3 rounded-2xl bg-background p-4"
           style={styles.cardShadow}
         >
-          <View className="flex-1 gap-1">
-            <Text className="text--h4 text-text-primary">{bubblePrimary}</Text>
-            {subtitlesOn ? <Text className="text--body-medium text-text-secondary">{bubbleSecondary}</Text> : null}
-          </View>
-          {connected ? (
+          {callStatus === "error" ? (
+            <View className="flex-1 gap-1">
+              <Text className="text--h4 text-error">Couldn&apos;t connect</Text>
+              <Text className="text--body-medium text-text-secondary">
+                {callError ?? "Something went wrong starting this lesson."}
+              </Text>
+            </View>
+          ) : (
+            <View className="flex-1 gap-1">
+              <Text className="text--h4 text-text-primary">{bubblePrimary}</Text>
+              {subtitlesOn ? <Text className="text--body-medium text-text-secondary">{bubbleSecondary}</Text> : null}
+            </View>
+          )}
+          {callStatus === "error" || agentStatus === "failed" ? (
+            <TouchableOpacity
+              accessibilityLabel="Try connecting again"
+              onPress={() => setRetryCount((count) => count + 1)}
+              className="h-9 w-9 items-center justify-center rounded-full bg-on-brand-subtle"
+            >
+              <Ionicons name="refresh" size={18} color={colors.brand.linguaPurple} />
+            </TouchableOpacity>
+          ) : isJoined ? (
             <TouchableOpacity
               accessibilityLabel="Hear the next phrase"
               onPress={() => setPhraseIndex((index) => (index + 1) % lesson.phrases.length)}
@@ -243,14 +406,20 @@ export default function LessonDetail() {
           active={cameraOn}
           onPress={() => setCameraOn((value) => !value)}
         />
-        <ControlButton icon={micOn ? "mic" : "mic-off"} label="Mic" active={micOn} onPress={() => setMicOn((value) => !value)} />
+        <ControlButton icon={micOn ? "mic" : "mic-off"} label="Mic" active={micOn} onPress={() => void handleToggleMic()} />
         <ControlButton
           icon="language"
           label="Subtitles"
           active={subtitlesOn}
           onPress={() => setSubtitlesOn((value) => !value)}
         />
-        <TouchableOpacity activeOpacity={0.85} onPress={handleEndCall} accessibilityRole="button" accessibilityLabel="End call" className="items-center gap-2">
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={() => void handleEndCall()}
+          accessibilityRole="button"
+          accessibilityLabel="End call"
+          className="items-center gap-2"
+        >
           <View className="h-14 w-14 items-center justify-center rounded-full bg-error">
             <Ionicons name="call" size={22} color="#FFFFFF" style={{ transform: [{ rotate: "135deg" }] }} />
           </View>
